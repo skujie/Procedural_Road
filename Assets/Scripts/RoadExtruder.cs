@@ -13,12 +13,15 @@ public class RoadExtruder : MonoBehaviour
     [SerializeField] protected SplineContainer _splineContainer;
     [SerializeField] protected MeshFilter _meshFilter;
 
-    [SerializeField, Min(1f)] protected float _resolution = 5f;
+    [SerializeField, Min(1)] protected int _resolution = 5;
     [SerializeField, Range(0.1f, 10f)] protected float _width = 3f;
     #endregion
     #region Private
     protected List<Vector3> verts1 = new();
     protected List<Vector3> verts2 = new();
+    #endregion
+    #region Properties
+    int SplineCount => _splineContainer.Splines.Count;
     #endregion
     #endregion
 
@@ -69,16 +72,13 @@ public class RoadExtruder : MonoBehaviour
     #endregion
 
     #region Private
-    protected virtual void SampleSpline(float t, out Vector3 p1, out Vector3 p2)
+    protected virtual void SampleSpline(int index, float t, out Vector3 p1, out Vector3 p2)
     {
-        _splineContainer.Evaluate(t, out float3 pos, out float3 fwd, out float3 up);
-
-        pos = transform.InverseTransformPoint(pos);
+        _splineContainer.Splines[index].Evaluate(t, out float3 pos, out float3 fwd, out float3 up);
 
         float3 right = Vector3.Cross(fwd, up).normalized;
         p1 = pos + (right * _width);
         p2 = pos - (right * _width);
-
     }
 
     protected virtual void GetVertices()
@@ -87,11 +87,18 @@ public class RoadExtruder : MonoBehaviour
         verts2.Clear();
 
         float step = 1f / _resolution;
+        Vector3 p1, p2;
 
-        for (int i = 0; i < _resolution; i++)
+        for (int splineIndex = 0; splineIndex < SplineCount; splineIndex++)
         {
-            float t = step * i;
-            SampleSpline(t, out Vector3 p1, out Vector3 p2);
+            for (int i = 0; i < _resolution; i++)
+            {
+                float t = step * i;
+                SampleSpline(splineIndex, t, out p1, out p2);
+                verts1.Add(p1);
+                verts2.Add(p2);
+            }
+            SampleSpline(splineIndex, 1f, out p1, out p2);
             verts1.Add(p1);
             verts2.Add(p2);
         }
@@ -106,37 +113,35 @@ public class RoadExtruder : MonoBehaviour
 
         GetVertices();
 
-        for(int i=1; i<verts1.Count; i++)
+        for(int splineIndex=0; splineIndex < SplineCount; splineIndex++)
         {
-            Vector3 p1 = verts1[i-1];
-            Vector3 p2 = verts2[i-1];
-            Vector3 p3;
-            Vector3 p4;
+            int splineOffset = (int)_resolution * splineIndex;
+            splineOffset += splineIndex;
 
-            if(i == verts2.Count-1)
+            for(int i=1; i<_resolution+1; i++)
             {
-                p3 = verts1[0];
-                p4 = verts2[0];
+                int vertOffset = splineOffset + i;
+                Vector3 p1 = verts1[vertOffset - 1];
+                Vector3 p2 = verts2[vertOffset - 1];
+                Vector3 p3 = verts1[vertOffset];
+                Vector3 p4 = verts2[vertOffset];
+
+                offset = 4 * (int)_resolution * splineIndex;
+                offset += 4 * (i - 1);
+
+                int t1 = offset;
+                int t2 = offset + 2;
+                int t3 = offset + 3;
+
+                int t4 = offset + 3;
+                int t5 = offset + 1;
+                int t6 = offset;
+
+                verts.AddRange(new List<Vector3>() { p1, p2, p3, p4 });
+                tris.AddRange(new List<int>() { t1, t2, t3, t4, t5, t6});
             }
-            else
-            {
-                p3 = verts1[i];
-                p4 = verts2[i];
-            }
-
-            offset = 4 * (i - 1);
-
-            int t1 = offset;
-            int t2 = offset + 2;
-            int t3 = offset + 3;
-
-            int t4 = offset + 3;
-            int t5 = offset + 1;
-            int t6 = offset;
-
-            verts.AddRange(new List<Vector3>() { p1, p2, p3, p4 });
-            tris.AddRange(new List<int>() { t1, t2, t3, t4, t5, t6});
         }
+        
         mesh.SetVertices(verts);
         mesh.SetTriangles(tris, 0);
         //mesh.RecalculateBounds();
