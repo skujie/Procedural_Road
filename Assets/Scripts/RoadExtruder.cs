@@ -37,21 +37,33 @@ public class RoadExtruder : MonoBehaviour
         Spline.Changed += OnSplineChange;
     }
 #if UNITY_EDITOR
+    [SerializeField] private bool _debugPoly;
     protected virtual void OnDrawGizmosSelected()
     {
         if (!Application.isPlaying)
             _meshFilter.mesh = BuildMesh();
 
         Gizmos.color = Color.blue;
-        for(int i = 0; i < verts1.Count; i++)
+        if (!_debugPoly)
         {
-            Vector3 p1 = transform.TransformPoint(verts1[i]);
-            Vector3 p2 = transform.TransformPoint(verts2[i]);
+            for(int i = 0; i < verts1.Count; i++)
+            {
+                Vector3 p1 = transform.TransformPoint(verts1[i]);
+                Vector3 p2 = transform.TransformPoint(verts2[i]);
 
-            Gizmos.DrawSphere(p1, 0.3f);
-            Gizmos.DrawSphere(p2, 0.3f);
-            Gizmos.DrawLine(p1,p2);
+                Gizmos.DrawSphere(p1, 0.3f);
+                Gizmos.DrawSphere(p2, 0.3f);
+                Gizmos.DrawLine(p1,p2);
+            }
         }
+        else
+        {
+            foreach(Vector3 vert in _meshFilter.sharedMesh.vertices)
+            {
+                Gizmos.DrawSphere(transform.TransformPoint(vert), 0.3f);
+            }
+        }
+        
     }
 
     protected virtual void Reset()
@@ -113,35 +125,43 @@ public class RoadExtruder : MonoBehaviour
 
         GetVertices();
 
+        //For each spline
         for(int splineIndex=0; splineIndex < SplineCount; splineIndex++)
         {
-            int splineOffset = (int)_resolution * splineIndex;
-            splineOffset += splineIndex;
+            //Add the two first vertices
+            verts.AddRange(new Vector3[] {verts1[offset], verts2[offset]});
 
+            //For each points pair
             for(int i=1; i<_resolution+1; i++)
             {
-                int vertOffset = splineOffset + i;
-                Vector3 p1 = verts1[vertOffset - 1];
-                Vector3 p2 = verts2[vertOffset - 1];
-                Vector3 p3 = verts1[vertOffset];
-                Vector3 p4 = verts2[vertOffset];
+                //Get vertices
+                int vertIndex = offset+ i;
+                Vector3 p3 = verts1[vertIndex];
+                Vector3 p4 = verts2[vertIndex];
 
-                offset = 4 * (int)_resolution * splineIndex;
-                offset += 4 * (i - 1);
+                int polyIndex = (offset + i) * 2;
+                int t1 = polyIndex;
+                int t2 = polyIndex - 1;
+                int t3 = polyIndex - 2;
 
-                int t1 = offset;
-                int t2 = offset + 2;
-                int t3 = offset + 3;
+                int t4 = polyIndex;
+                int t5 = polyIndex + 1;
+                int t6 = polyIndex - 1;
 
-                int t4 = offset + 3;
-                int t5 = offset + 1;
-                int t6 = offset;
-
-                verts.AddRange(new List<Vector3>() { p1, p2, p3, p4 });
-                tris.AddRange(new List<int>() { t1, t2, t3, t4, t5, t6});
+                verts.AddRange(new Vector3[] { p3, p4 });
+                tris.AddRange(new int[] { t1, t2, t3, t4, t5, t6});
             }
+            offset += _resolution+1;
         }
         
+        for(int i=0; i<tris.Count; i++)
+        {
+            if(tris[i] < 0)
+                Debug.LogWarning("Negative " + tris[i]);
+            else if (tris[i] >= verts.Count)
+                Debug.LogWarning("Too high " + tris[i]+"/"+verts.Count);
+        }
+
         mesh.SetVertices(verts);
         mesh.SetTriangles(tris, 0);
         //mesh.RecalculateBounds();
