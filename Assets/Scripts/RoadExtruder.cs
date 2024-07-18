@@ -37,12 +37,9 @@ public class RoadExtruder : MonoBehaviour
         Spline.Changed += OnSplineChange;
     }
 #if UNITY_EDITOR
-    [SerializeField] private bool _debugPoly;
+    [Header("Debug"), SerializeField] private bool _debugPoly;
     protected virtual void OnDrawGizmosSelected()
     {
-        if (!Application.isPlaying)
-            _meshFilter.mesh = BuildMesh();
-
         Gizmos.color = Color.blue;
         if (!_debugPoly)
         {
@@ -63,7 +60,6 @@ public class RoadExtruder : MonoBehaviour
                 Gizmos.DrawSphere(transform.TransformPoint(vert), 0.3f);
             }
         }
-        
     }
 
     protected virtual void Reset()
@@ -84,35 +80,56 @@ public class RoadExtruder : MonoBehaviour
     #endregion
 
     #region Private
+    protected virtual void Build()
+    {
+        GetVertices();
+        _meshFilter.mesh = BuildMesh();
+    }
+
     protected virtual void SampleSpline(int index, float t, out Vector3 p1, out Vector3 p2)
     {
+        //Evaluate point on spline at time t
         _splineContainer.Splines[index].Evaluate(t, out float3 pos, out float3 fwd, out float3 up);
 
+        //Get the Right direction (side) from a cross product of Forward and Up direction
         float3 right = Vector3.Cross(fwd, up).normalized;
+
+        //Get points on side by extending right and left
         p1 = pos + (right * _width);
         p2 = pos - (right * _width);
     }
 
     protected virtual void GetVertices()
     {
+        //Clear old datas
         verts1.Clear();
         verts2.Clear();
 
         Vector3 p1, p2;
 
+        //For each spline
         for (int splineIndex = 0; splineIndex < SplineCount; splineIndex++)
         {
+            //Get spline length
             float splineLen = _splineContainer.Splines[splineIndex].GetLength();
+            //Normalized step (for sampling)
             float normalizedStep = _step / splineLen;
+            //How many steps to draw the spline
             int stepCount = Mathf.CeilToInt(1f/normalizedStep);
 
+            //For each points in spline
             for (int i = 0; i < stepCount; i++)
             {
+                //Sample position
                 float t = normalizedStep * i;
                 SampleSpline(splineIndex, t, out p1, out p2);
+
+                //Add the positions to the vertices
                 verts1.Add(p1);
                 verts2.Add(p2);
             }
+
+            //Complete from the last sample to the complete end of spline
             SampleSpline(splineIndex, 1f, out p1, out p2);
             verts1.Add(p1);
             verts2.Add(p2);
@@ -121,18 +138,20 @@ public class RoadExtruder : MonoBehaviour
 
     protected virtual Mesh BuildMesh()
     {
+        //Initialize variables
         Mesh mesh = new Mesh();
         List<Vector3> verts = new List<Vector3>();
         List<int> tris = new List<int>();
         int offset = 0;
 
-        GetVertices();
-
         //For each spline
         for(int splineIndex=0; splineIndex < SplineCount; splineIndex++)
         {
+            //Get spline length
             float splineLen = _splineContainer.Splines[splineIndex].GetLength();
+            //Normalized step
             float normalizedStep = _step / splineLen;
+            //How many steps to draw
             int stepCount = Mathf.CeilToInt(1f / normalizedStep);
 
             //Add the two first vertices
@@ -146,6 +165,7 @@ public class RoadExtruder : MonoBehaviour
                 Vector3 p3 = verts1[vertIndex];
                 Vector3 p4 = verts2[vertIndex];
 
+                //Compose triangles
                 int polyIndex = (offset + i) * 2;
                 int t1 = polyIndex;
                 int t2 = polyIndex - 1;
@@ -155,23 +175,20 @@ public class RoadExtruder : MonoBehaviour
                 int t5 = polyIndex + 1;
                 int t6 = polyIndex - 1;
 
+                //Add to vertices/triangles lists
                 verts.AddRange(new Vector3[] { p3, p4 });
                 tris.AddRange(new int[] { t1, t2, t3, t4, t5, t6});
             }
+            //Add offset (set next spline's start index)
             offset += stepCount + 1;
         }
-        
-        for(int i=0; i<tris.Count; i++)
-        {
-            if(tris[i] < 0)
-                Debug.LogWarning("Negative " + tris[i]);
-            else if (tris[i] >= verts.Count)
-                Debug.LogWarning("Too high " + tris[i]+"/"+verts.Count);
-        }
 
+        //Apply datas
         mesh.SetVertices(verts);
         mesh.SetTriangles(tris, 0);
-        //mesh.RecalculateBounds();
+
+        //Recalculate
+        mesh.RecalculateBounds();
         mesh.RecalculateNormals();
         return mesh;
     }
