@@ -13,7 +13,7 @@ public class RoadExtruder : MonoBehaviour
     [SerializeField] protected SplineContainer _splineContainer;
     [SerializeField] protected MeshFilter _meshFilter;
 
-    [SerializeField, Min(1)] protected int _resolution = 5;
+    [SerializeField, Min(0.1f)] protected float _step = 5;
     [SerializeField, Range(0.1f, 10f)] protected float _width = 3f;
     #endregion
     #region Private
@@ -98,14 +98,17 @@ public class RoadExtruder : MonoBehaviour
         verts1.Clear();
         verts2.Clear();
 
-        float step = 1f / _resolution;
         Vector3 p1, p2;
 
         for (int splineIndex = 0; splineIndex < SplineCount; splineIndex++)
         {
-            for (int i = 0; i < _resolution; i++)
+            float splineLen = _splineContainer.Splines[splineIndex].GetLength();
+            float normalizedStep = _step / splineLen;
+            int stepCount = Mathf.CeilToInt(1f/normalizedStep);
+
+            for (int i = 0; i < stepCount; i++)
             {
-                float t = step * i;
+                float t = normalizedStep * i;
                 SampleSpline(splineIndex, t, out p1, out p2);
                 verts1.Add(p1);
                 verts2.Add(p2);
@@ -128,11 +131,15 @@ public class RoadExtruder : MonoBehaviour
         //For each spline
         for(int splineIndex=0; splineIndex < SplineCount; splineIndex++)
         {
+            float splineLen = _splineContainer.Splines[splineIndex].GetLength();
+            float normalizedStep = _step / splineLen;
+            int stepCount = Mathf.CeilToInt(1f / normalizedStep);
+
             //Add the two first vertices
             verts.AddRange(new Vector3[] {verts1[offset], verts2[offset]});
 
             //For each points pair
-            for(int i=1; i<_resolution+1; i++)
+            for(int i=1; i< stepCount + 1; i++)
             {
                 //Get vertices
                 int vertIndex = offset+ i;
@@ -151,7 +158,7 @@ public class RoadExtruder : MonoBehaviour
                 verts.AddRange(new Vector3[] { p3, p4 });
                 tris.AddRange(new int[] { t1, t2, t3, t4, t5, t6});
             }
-            offset += _resolution+1;
+            offset += stepCount + 1;
         }
         
         for(int i=0; i<tris.Count; i++)
